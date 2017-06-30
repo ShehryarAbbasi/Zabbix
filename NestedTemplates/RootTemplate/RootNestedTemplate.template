@@ -95,11 +95,11 @@
       "Default": "dgGGk.juki78$$"
     },
     "MasterUser": {
-      "AllowedPattern": "([A-Za-z0-9]{3,50})",
-      "ConstraintDescription": "Input your database Password, Min 3, Maximum of 30 characters.",
+      "AllowedPattern": "([A-Za-z0-9]{8,50})",
+      "ConstraintDescription": "Input your database Password, Min 8, Maximum of 30 characters.",
       "Description": "Enter your Database Master UserName, Min 8, maximum of 30 characters. This user is used for the admin user of Zabbix/Grafana Aurora Database.",
       "Type": "String",
-      "Default": "zabbix"
+      "Default": "zabbixgrafana"
     },
     "ZabbixDomainName": {
       "ConstraintDescription": "String domain name.",
