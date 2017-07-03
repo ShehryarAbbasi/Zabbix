@@ -20,7 +20,8 @@
             "KeyPairName",
             "InstanceType",
             "ZabbixServerName",
-            "GrafanaServerName"
+            "GrafanaServerName",
+            "TestInstanceName"
           ]
         },
         {
@@ -61,6 +62,9 @@
         "GrafanaServerName": {
           "default": "DNS/Tag Name for Grafana Server"
         },
+        "TestInstanceName": {
+          "default": "DNS/Tag Name for Test Server"
+        },
         "MasterPassword": {
           "default": "Zabbix/Grafana Database Master Password"
         },
@@ -87,9 +91,9 @@
   },
   "Parameters": {
     "MasterPassword": {
-      "AllowedPattern": "([A-Za-z0-9_!@#$%^&*-.]{3,50})",
-      "ConstraintDescription": "Input your database Password, Min 3, Maximum of 30 characters.",
-      "Description": "Enter your Database Password, Min 8, maximum of 30 characters. This password is used for the admin user of Zabbix/Grafana Database.",
+      "AllowedPattern": "([A-Za-z0-9_!@#$%^&*-.]{4,50})",
+      "ConstraintDescription": "Input your database Password, Min 4, Maximum of 30 characters.",
+      "Description": "Enter your Database Password, Min 4, maximum of 30 characters. This password is used for the admin user of Zabbix/Grafana Database.",
       "NoEcho": "true",
       "Type": "String",
       "Default": "dgGGk.juki78$$"
@@ -102,13 +106,15 @@
       "Default": "zabbixgrafana"
     },
     "ZabbixDomainName": {
-      "ConstraintDescription": "String domain name.",
+      "AllowedPattern": "([A-Za-z]{3,50})",
+      "ConstraintDescription": "String domain name must be between 3 and 50 characters with letters only.",
       "Default": "mon",
       "Description": "Name of Private Route53 Domain to reach your Zabbix Endpoint after setup.",
       "Type": "String"
     },
     "GrafanaDomainName": {
-      "ConstraintDescription": "String domain name.",
+      "AllowedPattern": "([A-Za-z]{3,50})",
+      "ConstraintDescription": "String domain name must be between 3 and 50 characters with letters only.",
       "Default": "draw",
       "Description": "Name of Private Route53 Domain to reach your Grafana Endpoint after setup.",
       "Type": "String"
@@ -137,7 +143,7 @@
       ],
       "ConstraintDescription": "Must be a valid EC2 instance type.",
       "Default": "m4.xlarge",
-      "Description": "Choose your Custom Instance type for Zabbix/Grafana Server",
+      "Description": "Choose your Custom Instance type for Zabbix/Grafana/Test Server",
       "Type": "String"
     },
     "QSS3BucketName": {
@@ -155,15 +161,21 @@
       "Type": "String"
     },
     "ZabbixServerName": {
-      "AllowedPattern": "([A-Za-z0-9_]{3,50})",
+      "AllowedPattern": "([A-Za-z0-9]{3,50})",
       "Default": "Zabbix",
       "Description": "Name for Zabbix EC2 Instance/Tag.",
       "Type": "String"
     },
     "GrafanaServerName": {
-      "AllowedPattern": "([A-Za-z0-9_]{3,50})",
+      "AllowedPattern": "([A-Za-z0-9]{3,50})",
       "Default": "Grafana",
       "Description": "Name for Grafana EC2 Instance/Tag.",
+      "Type": "String"
+    },
+    "TestInstanceName": {
+      "AllowedPattern": "([A-Za-z0-9]{3,50})",
+      "Default": "ZabbixTestAgent",
+      "Description": "Name for Test EC2 Instance/Tag.",
       "Type": "String"
     },
     "RemoteAccessCIDR": {
@@ -332,7 +344,17 @@
           ]
         },
         "GroupName": "Zabbix Agents Security Group",
-        "GroupDescription": "Zabbix inter-agent communication and management ports"
+        "GroupDescription": "Zabbix inter-agent communication and management ports",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "22",
+            "ToPort": "22",
+            "SourceSecurityGroupId": {
+              "Ref": "BastionSecurityGroup"
+            }
+          }
+        ]
       }
     },
     "ZabbixELBSecurityGroup": {
@@ -393,6 +415,14 @@
             "ToPort": "3306",
             "SourceSecurityGroupId": {
               "Ref": "GrafanaServerSecurityGroup"
+            }
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "3306",
+            "ToPort": "3306",
+            "SourceSecurityGroupId": {
+              "Ref": "BastionSecurityGroup"
             }
           }
         ]
@@ -1085,6 +1115,78 @@
         "TimeoutInMinutes": "90"
       }
     },
+    "TestInstanceStack": {
+      "DependsOn": "ZabbixInstanceStack",
+      "Type": "AWS::CloudFormation::Stack",
+      "Properties": {
+        "TemplateURL": {
+          "Fn::Join": [
+            "/",
+            [
+              {
+                "Fn::FindInMap": [
+                  "AWSInfoRegionMap",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "QuickStartS3URL"
+                ]
+              },
+              {
+                "Ref": "QSS3BucketName"
+              },
+              {
+                "Ref": "QSS3KeyPrefix"
+              },
+              "TestInstanceInstallTemplate.template"
+            ]
+          ]
+        },
+        "Parameters": {
+          "VPCID": {
+            "Fn::GetAtt": [
+              "VPCStack",
+              "Outputs.VPCId"
+            ]
+          },
+          "PrivateSubnetID": {
+            "Fn::GetAtt": [
+              "VPCStack",
+              "Outputs.PrivateSubnetAZ1"
+            ]
+          },
+          "ZabbixAgentsSecurityGroup": {
+            "Ref": "ZabbixAgentsSecurityGroup"
+          },
+          "InstanceProfileTestEC2": {
+            "Ref": "InstanceProfile"
+          },
+          "KeyPairName": {
+            "Ref": "KeyPairName"
+          },
+          "ZabbixAMIOS": "RHEL72HVM",
+          "InstanceType": {
+            "Ref": "InstanceType"
+          },
+          "ServerName": {
+            "Ref": "TestInstanceName"
+          },
+          "QSS3BucketName": {
+            "Ref": "QSS3BucketName"
+          },
+          "QSS3KeyPrefix": {
+            "Ref": "QSS3KeyPrefix"
+          },
+          "ZabbixServerName": {
+            "Ref": "ZabbixServerName"
+          },
+          "ZabbixDomainName": {
+            "Ref": "ZabbixDomainName"
+          }
+        },
+        "TimeoutInMinutes": "90"
+      }
+    },
     "BastionStack": {
       "DependsOn": "VPCStack",
       "Type": "AWS::CloudFormation::Stack",
@@ -1167,6 +1269,14 @@
         "Fn::GetAtt": [
           "ZabbixInstanceStack",
           "Outputs.ZabbixPrivateIPAddress"
+        ]
+      }
+    },
+    "TestInstancePrivateIPAddress": {
+      "Value": {
+        "Fn::GetAtt": [
+          "TestInstanceStack",
+          "Outputs.TestInstancePrivateIPAddress"
         ]
       }
     },

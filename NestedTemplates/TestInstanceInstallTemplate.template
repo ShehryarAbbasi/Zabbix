@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "This is template deploys a Grafana server.",
+  "Description": "This is template deploys a Zabbix Test Subject Server.",
   "Metadata": {
     "AWS::CloudFormation::Interface": {
       "ParameterGroups": [
@@ -11,7 +11,8 @@
           "Parameters": [
             "VPCID",
             "PrivateSubnetID",
-            "GrafanaServerSecurityGroup"
+            "ZabbixAgentsSecurityGroup",
+            "InstanceProfileTestEC2"
           ]
         },
         {
@@ -20,22 +21,11 @@
           },
           "Parameters": [
             "KeyPairName",
-            "GrafanaAMIOS",
-            "GrafanaInstanceType",
-            "GrafanaServerName",
+            "ZabbixAMIOS",
+            "ServerName",
+            "InstanceType",
             "ZabbixServerName",
-            "ZabbixDomainName",
-            "InstanceProfileGrafana"
-          ]
-        },
-        {
-          "Label": {
-            "default": "Grafana Database Configuration"
-          },
-          "Parameters": [
-            "MasterUser",
-            "DBEndPoint",
-            "MasterPassword"
+            "ZabbixDomainName"
           ]
         },
         {
@@ -49,31 +39,22 @@
         }
       ],
       "ParameterLabels": {
-        "GrafanaServerName": {
-          "default": "DNS/Tag Name"
-        },
-        "DBEndPoint": {
-          "default": "Database Endpoint"
-        },
-        "InstanceProfileGrafana": {
-          "default": "Instance Profile"
-        },
-        "GrafanaServerSecurityGroup": {
-          "default": "Security Group"
+        "ServerName": {
+          "default": "DNS/Tag Name for Server"
         },
         "ZabbixServerName": {
-          "default": "DNS/Tag Name"
-        },
-        "MasterPassword": {
-          "default": "Database Master Password"
-        },
-        "MasterUser": {
-          "default": "Database Master User"
+          "default": "DNS/Tag Name for Zabbix Server"
         },
         "ZabbixDomainName": {
-          "default": "Domain Name"
+          "default": "DNS/Tag Name for Zabbix Domain"
         },
-        "GrafanaInstanceType": {
+        "InstanceProfileTestEC2": {
+          "default": "Instance Profile"
+        },
+        "ZabbixAgentsSecurityGroup": {
+          "default": "Zabbix Agent Security Group"
+        },
+        "InstanceType": {
           "default": "Instance Type"
         },
         "PrivateSubnetID": {
@@ -88,40 +69,19 @@
         "VPCID": {
           "default": "VPC ID"
         },
-        "GrafanaAMIOS": {
-          "default": "Operating System"
+        "ZabbixAMIOS": {
+          "default": "Zabbix Operating System"
         }
       }
     }
   },
   "Parameters": {
-    "MasterPassword": {
-      "AllowedPattern": "([A-Za-z0-9_!@#$%^&*-.]{8,50})",
-      "ConstraintDescription": "Input your database Password, Min 8, Maximum of 30 characters.",
-      "Description": "Enter your Database Password, Min 8, maximum of 30 characters. This password is used for the admin user of Grafana Database.",
-      "NoEcho": "true",
-      "Type": "String",
-      "Default": "dgGGk.juki78$$"
-    },
-    "MasterUser": {
-      "AllowedPattern": "([A-Za-z0-9]{4,50})",
-      "ConstraintDescription": "Input your database UserName, Min 4, Maximum of 30 characters.",
-      "Description": "Enter your Database Master UserName, Min 4, maximum of 30 characters. This user is used for the admin user of Grafana Database.",
-      "Type": "String",
-      "Default": "Grafana"
-    },
-    "ZabbixDomainName": {
-      "ConstraintDescription": "Zabbix String domain name.",
-      "Default": "graph",
-      "Description": "Name of Private Route53 Domain to reach your Zabbix Endpoint after setup.",
-      "Type": "String"
-    },
     "KeyPairName": {
       "ConstraintDescription": "must be the name of an existing EC2 KeyPair.",
       "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instance",
       "Type": "AWS::EC2::KeyPair::KeyName"
     },
-    "GrafanaInstanceType": {
+    "InstanceType": {
       "AllowedValues": [
         "t2.medium",
         "t2.large",
@@ -139,12 +99,12 @@
         "r4.16xlarge"
       ],
       "ConstraintDescription": "Must be a valid EC2 instance type.",
-      "Default": "m4.xlarge",
-      "Description": "Choose your Custom Instance type for Grafana Server",
+      "Default": "m4.2xlarge",
+      "Description": "Choose your Custom Instance type for Test Server",
       "Type": "String"
     },
     "PrivateSubnetID": {
-      "Description": "ID of the private subnet aka Availability Zone needed for Grafana Server (e.g., subnet-a0246dcd)",
+      "Description": "ID of the private subnet aka Availability Zone needed for Test Server(e.g., subnet-a0246dcd)",
       "Type": "AWS::EC2::Subnet::Id"
     },
     "QSS3BucketName": {
@@ -166,37 +126,39 @@
       "Default": "vpc-77e23811",
       "Type": "AWS::EC2::VPC::Id"
     },
-    "GrafanaAMIOS": {
+    "ZabbixAMIOS": {
       "AllowedValues": [
         "RHEL72HVM"
       ],
       "Default": "RHEL72HVM",
-      "Description": "Operating system and version for Grafana Server.",
+      "Description": "Operating system and version for Zabbix Server.",
       "Type": "String"
     },
-    "GrafanaServerName": {
+    "ServerName": {
       "AllowedPattern": "([A-Za-z0-9_]{3,50})",
-      "Default": "Grafana",
-      "Description": "Name for Grafana EC2 Instance/Tag.",
+      "Default": "ZabbixTestInstance",
+      "Description": "Name for EC2 Instance/Tag.",
       "Type": "String"
     },
     "ZabbixServerName": {
       "AllowedPattern": "([A-Za-z0-9_]{3,50})",
       "Default": "Zabbix",
-      "Description": "Name for Zabbix EC2 Instance/Tag.",
+      "Description": "Name for EC2 Instance/Tag.",
       "Type": "String"
     },
-    "InstanceProfileGrafana": {
-      "Description": "Instance Profile for Grafana Server",
+    "ZabbixDomainName": {
+      "AllowedPattern": "([A-Za-z]{3,50})",
+      "Default": "mon",
+      "Description": "Name for Zabbix Domain ",
       "Type": "String"
     },
-    "DBEndPoint": {
-      "Description": "Endpoint for Database for Grafana",
-      "Type": "String"
-    },
-    "GrafanaServerSecurityGroup": {
-      "Description": "Grafana Server Main Security Group",
+    "ZabbixAgentsSecurityGroup": {
+      "Description": "EC2 Security Group for Zabbix Test Agents",
       "Type": "AWS::EC2::SecurityGroup::Id"
+    },
+    "InstanceProfileTestEC2": {
+      "Description": "Instance Profile for Server to Assume.",
+      "Type": "String"
     }
   },
   "Rules": {
@@ -317,7 +279,7 @@
         "QuickStartS3URL": "https://s3.amazonaws.com"
       }
     },
-    "GrafanaAMINameMap": {
+    "ZabbixAMINameMap": {
       "RHEL72HVM": {
         "Code": "RHEL72HVM",
         "repo": ""
@@ -329,13 +291,13 @@
     }
   },
   "Resources": {
-    "GrafanaInstance": {
+    "TestInstance": {
       "Type": "AWS::EC2::Instance",
       "Metadata": {
         "AWS::CloudFormation::Init": {
           "config": {
             "files": {
-              "/tmp/grafana-setup.txt": {
+              "/tmp/zabbix-agent-setup.txt": {
                 "content": {
                   "Fn::Join": [
                     "",
@@ -361,35 +323,18 @@
                         "Ref": "QSS3KeyPrefix"
                       },
                       "\n",
-                      "DatabasePass|",
-                      {
-                        "Ref": "MasterPassword"
-                      },
-                      "\n",
-                      "DatabaseUser|",
-                      {
-                        "Ref": "MasterUser"
-                      },
-                      "\n",
-                      "DBConnString|",
-                      {
-                        "Ref": "DBEndPoint"
-                      },
-                      "\n",
-                      "ZabbixURL|",
+                      "ZabbixServer|",
                       {
                         "Fn::Join": [
                           "",
                           [
-                            "http://",
                             {
                               "Ref": "ZabbixServerName"
                             },
                             ".",
                             {
                               "Ref": "ZabbixDomainName"
-                            },
-                            "/zabbix/api_jsonrpc.php"
+                            }
                           ]
                         ]
                       },
@@ -401,7 +346,7 @@
                 "owner": "root",
                 "group": "root"
               },
-              "/tmp/bootstrapGrafana.sh": {
+              "/tmp/bootstrapZabbixAgent.sh": {
                 "source": {
                   "Fn::Join": [
                     "/",
@@ -421,7 +366,7 @@
                       {
                         "Ref": "QSS3KeyPrefix"
                       },
-                      "Scripts/bootstrapGrafana.sh"
+                      "Scripts/bootstrapZabbixAgent.sh"
                     ]
                   ]
                 },
@@ -435,7 +380,7 @@
       },
       "Properties": {
         "IamInstanceProfile": {
-          "Ref": "InstanceProfileGrafana"
+          "Ref": "InstanceProfileTestEC2"
         },
         "ImageId": {
           "Fn::FindInMap": [
@@ -445,9 +390,9 @@
             },
             {
               "Fn::FindInMap": [
-                "GrafanaAMINameMap",
+                "ZabbixAMINameMap",
                 {
-                  "Ref": "GrafanaAMIOS"
+                  "Ref": "ZabbixAMIOS"
                 },
                 "Code"
               ]
@@ -456,14 +401,14 @@
         },
         "SecurityGroupIds": [
           {
-            "Ref": "GrafanaServerSecurityGroup"
+            "Ref": "ZabbixAgentsSecurityGroup"
           }
         ],
         "SubnetId": {
           "Ref": "PrivateSubnetID"
         },
         "InstanceType": {
-          "Ref": "GrafanaInstanceType"
+          "Ref": "InstanceType"
         },
         "KeyName": {
           "Ref": "KeyPairName"
@@ -477,7 +422,7 @@
                 "cd /tmp \n",
                 "curl -O https://bootstrap.pypa.io/get-pip.py\n",
                 "python get-pip.py\n",
-                "echo DEBUGPipInstalled &> /tmp/bootstrap.log\n",
+                "echo DEBUGPipInstalled &> /tmp/bootstrapagent.log\n",
                 "pip install awscli\n",
                 "curl -O https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
                 "gunzip aws-cfn-bootstrap-latest.tar.gz\n",
@@ -492,19 +437,19 @@
                 {
                   "Ref": "AWS::StackName"
                 },
-                "         --resource GrafanaInstance ",
+                "         --resource TestInstance ",
                 "         --region ",
                 {
                   "Ref": "AWS::Region"
                 },
                 "\n",
-                "/tmp/bootstrapGrafana.sh -v --params_file /tmp/grafana-setup.txt &>> /tmp/bootstrap.log\n",
+                "/tmp/bootstrapZabbixAgent.sh -v --params_file /tmp/zabbix-agent-setup.txt &>> /tmp/bootstrapagent.log\n",
                 "/usr/bin/cfn-signal -e $? ",
                 "         --stack ",
                 {
                   "Ref": "AWS::StackName"
                 },
-                "         --resource GrafanaInstance ",
+                "         --resource TestInstance ",
                 "         --region ",
                 {
                   "Ref": "AWS::Region"
@@ -518,7 +463,7 @@
           {
             "Key": "Name",
             "Value": {
-              "Ref": "GrafanaServerName"
+              "Ref": "ServerName"
             }
           }
         ]
@@ -531,26 +476,26 @@
     }
   },
   "Outputs": {
-    "GrafanaServerName": {
+    "ZabbixServerName": {
       "Value": {
-        "Ref": "GrafanaServerName"
+        "Ref": "ServerName"
       },
-      "Description": "Grafana Server Name"
+      "Description": "Test Server Name"
     },
     "InstanceID": {
       "Value": {
-        "Ref": "GrafanaInstance"
+        "Ref": "TestInstance"
       },
-      "Description": "Grafana Instance ID"
+      "Description": "Test Instance ID"
     },
-    "GrafanaPrivateIPAddress": {
+    "TestInstancePrivateIPAddress": {
       "Value": {
         "Fn::GetAtt": [
-          "GrafanaInstance",
+          "TestInstance",
           "PrivateIp"
         ]
       },
-      "Description": "Grafana Instance private IP"
+      "Description": "Test Instance private IP"
     }
   }
 }
