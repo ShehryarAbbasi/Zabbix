@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "This is template deploys a Zabbix server for QuickStart.",
+  "Description": "This is template deploys a Mid Server for Zabbix/Grafana QuickStart.",
   "Metadata": {
     "AWS::CloudFormation::Interface": {
       "ParameterGroups": [
@@ -12,10 +12,7 @@
             "VPCID",
             "PrivateSubnetID",
             "ZabbixAgentsSecurityGroup",
-            "ZabbixServerSecurityGroup",
-            "InstanceProfileZabbix",
-            "DBEndPoint",
-            "EnvironmentName"
+            "InstanceProfileTestEC2"
           ]
         },
         {
@@ -25,17 +22,10 @@
           "Parameters": [
             "KeyPairName",
             "ZabbixAMIOS",
-            "ZabbixInstanceType",
-            "ZabbixServerName"
-          ]
-        },
-        {
-          "Label": {
-            "default": "Zabbix Database Configuration"
-          },
-          "Parameters": [
-            "MasterUser",
-            "MasterPassword"
+            "ServerName",
+            "InstanceType",
+            "ZabbixServerName",
+            "ZabbixDomainName"
           ]
         },
         {
@@ -44,34 +34,27 @@
           },
           "Parameters": [
             "QSS3BucketName",
-            "QSS3KeyPrefix",
-            "QSServerSpecBucketName"
+            "QSS3KeyPrefix"
           ]
         }
       ],
       "ParameterLabels": {
-        "ZabbixServerName": {
+        "ServerName": {
           "default": "DNS/Tag Name for Server"
         },
-        "EnvironmentName": {
-          "default": "An environment name that will be prefixed to resource names"
+        "ZabbixServerName": {
+          "default": "DNS/Tag Name for Zabbix Server"
         },
-        "InstanceProfileZabbix": {
+        "ZabbixDomainName": {
+          "default": "DNS/Tag Name for Zabbix Domain"
+        },
+        "InstanceProfileTestEC2": {
           "default": "Instance Profile"
         },
         "ZabbixAgentsSecurityGroup": {
           "default": "Zabbix Agent Security Group"
         },
-        "ZabbixServerSecurityGroup": {
-          "default": "Zabbix Server Security Group"
-        },
-        "MasterPassword": {
-          "default": "Zabbix Database Master Password"
-        },
-        "MasterUser": {
-          "default": "Database Master User"
-        },
-        "ZabbixInstanceType": {
+        "InstanceType": {
           "default": "Instance Type"
         },
         "PrivateSubnetID": {
@@ -88,45 +71,17 @@
         },
         "ZabbixAMIOS": {
           "default": "Zabbix Operating System"
-        },
-        "DBEndPoint": {
-          "default": "Database Endpoint"
-        },
-        "QSServerSpecBucketName": {
-          "default": "Quick Start ServerSpec Bucket"
         }
       }
     }
   },
   "Parameters": {
-    "MasterPassword": {
-      "AllowedPattern": "([A-Za-z0-9_!@#$%^&*-.]{8,50})",
-      "ConstraintDescription": "Input your database Password, Min 8, Maximum of 30 characters.",
-      "Description": "Enter your Database Password, Min 8, maximum of 30 characters. This password is used for the admin user of Zabbix Mysql Database.",
-      "NoEcho": "true",
-      "Type": "String",
-      "Default": "dgGGk.juki78$$"
-    },
-    "MasterUser": {
-      "AllowedPattern": "([A-Za-z0-9]{4,50})",
-      "ConstraintDescription": "Input your database UserName, Min 8, Maximum of 30 characters.",
-      "Description": "Enter your Database Master UserName, Min 8, maximum of 30 characters. This user is used for the admin user of Zabbix Mysql/Aurora Database.",
-      "Type": "String",
-      "Default": "zabbix"
-    },
-    "EnvironmentName": {
-      "AllowedPattern": "([A-Za-z0-9]{2,15})",
-      "ConstraintDescription": "Environment Name must be between 2 and 15 characters with letters only.",
-      "Default": "QS",
-      "Description": "NName that is prefixed to all AWS Resources created by this template.",
-      "Type": "String"
-    },
     "KeyPairName": {
       "ConstraintDescription": "must be the name of an existing EC2 KeyPair.",
       "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instance",
       "Type": "AWS::EC2::KeyPair::KeyName"
     },
-    "ZabbixInstanceType": {
+    "InstanceType": {
       "AllowedValues": [
         "t2.medium",
         "t2.large",
@@ -145,19 +100,12 @@
       ],
       "ConstraintDescription": "Must be a valid EC2 instance type.",
       "Default": "m4.2xlarge",
-      "Description": "Choose your Custom Instance type for Zabbix Server",
+      "Description": "Choose your Custom Instance type for Test Server",
       "Type": "String"
     },
     "PrivateSubnetID": {
-      "Description": "ID of the private subnet aka Availability Zone needed for Zabbix Server(e.g., subnet-a0246dcd)",
+      "Description": "ID of the private subnet aka Availability Zone needed for Test Server(e.g., subnet-a0246dcd)",
       "Type": "AWS::EC2::Subnet::Id"
-    },
-    "QSServerSpecBucketName": {
-      "AllowedPattern": "^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$",
-      "ConstraintDescription": "Quick Start bucket name can include numbers, lowercase letters, uppercase letters, and hyphens (-). It cannot start or end with a hyphen (-).",
-      "Default": "serverspec-test",
-      "Description": "S3 bucket name for the Server Spec assets. Quick Start bucket name can include numbers, lowercase letters, uppercase letters, and hyphens (-). It cannot start or end with a hyphen (-).",
-      "Type": "String"
     },
     "QSS3BucketName": {
       "AllowedPattern": "^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$",
@@ -186,26 +134,30 @@
       "Description": "Operating system and version for Zabbix Server.",
       "Type": "String"
     },
+    "ServerName": {
+      "AllowedPattern": "([A-Za-z0-9_]{3,50})",
+      "Default": "ZabbixTestInstance",
+      "Description": "Name for EC2 Instance/Tag.",
+      "Type": "String"
+    },
     "ZabbixServerName": {
       "AllowedPattern": "([A-Za-z0-9_]{3,50})",
       "Default": "Zabbix",
       "Description": "Name for EC2 Instance/Tag.",
       "Type": "String"
     },
-    "ZabbixAgentsSecurityGroup": {
-      "Description": "EC2 Security Group for Zabbix Agents",
-      "Type": "AWS::EC2::SecurityGroup::Id"
-    },
-    "ZabbixServerSecurityGroup": {
-      "Description": "Zabbix Server Main Security Group",
-      "Type": "AWS::EC2::SecurityGroup::Id"
-    },
-    "InstanceProfileZabbix": {
-      "Description": "Instance Profile for Server to Assume.",
+    "ZabbixDomainName": {
+      "AllowedPattern": "([A-Za-z]{3,50})",
+      "Default": "mon",
+      "Description": "Name for Zabbix Domain ",
       "Type": "String"
     },
-    "DBEndPoint": {
-      "Description": "Database Endpoint For Zabbix Server",
+    "ZabbixAgentsSecurityGroup": {
+      "Description": "EC2 Security Group for Zabbix Test Agents",
+      "Type": "AWS::EC2::SecurityGroup::Id"
+    },
+    "InstanceProfileTestEC2": {
+      "Description": "Instance Profile for Server to Assume.",
       "Type": "String"
     }
   },
@@ -339,13 +291,13 @@
     }
   },
   "Resources": {
-    "ZabbixInstance": {
+    "TestInstance": {
       "Type": "AWS::EC2::Instance",
       "Metadata": {
         "AWS::CloudFormation::Init": {
           "config": {
             "files": {
-              "/tmp/zabbix-setup.txt": {
+              "/tmp/zabbix-agent-setup.txt": {
                 "content": {
                   "Fn::Join": [
                     "",
@@ -371,24 +323,20 @@
                         "Ref": "QSS3KeyPrefix"
                       },
                       "\n",
-                      "QSServerSpecBucketName|",
+                      "ZabbixServer|",
                       {
-                        "Ref": "QSServerSpecBucketName"
-                      },
-                      "\n",
-                      "DatabasePass|",
-                      {
-                        "Ref": "MasterPassword"
-                      },
-                      "\n",
-                      "DatabaseUser|",
-                      {
-                        "Ref": "MasterUser"
-                      },
-                      "\n",
-                      "DBConnString|",
-                      {
-                        "Ref": "DBEndPoint"
+                        "Fn::Join": [
+                          "",
+                          [
+                            {
+                              "Ref": "ZabbixServerName"
+                            },
+                            ".",
+                            {
+                              "Ref": "ZabbixDomainName"
+                            }
+                          ]
+                        ]
                       },
                       "\n"
                     ]
@@ -398,7 +346,7 @@
                 "owner": "root",
                 "group": "root"
               },
-              "/tmp/bootstrapZabbix.sh": {
+              "/tmp/bootstrapZabbixMidServer.sh": {
                 "source": {
                   "Fn::Join": [
                     "/",
@@ -418,7 +366,7 @@
                       {
                         "Ref": "QSS3KeyPrefix"
                       },
-                      "Scripts/bootstrapZabbix.sh"
+                      "Scripts/bootstrapZabbixMidServer.sh"
                     ]
                   ]
                 },
@@ -432,7 +380,7 @@
       },
       "Properties": {
         "IamInstanceProfile": {
-          "Ref": "InstanceProfileZabbix"
+          "Ref": "InstanceProfileTestEC2"
         },
         "ImageId": {
           "Fn::FindInMap": [
@@ -453,9 +401,6 @@
         },
         "SecurityGroupIds": [
           {
-            "Ref": "ZabbixServerSecurityGroup"
-          },
-          {
             "Ref": "ZabbixAgentsSecurityGroup"
           }
         ],
@@ -463,7 +408,7 @@
           "Ref": "PrivateSubnetID"
         },
         "InstanceType": {
-          "Ref": "ZabbixInstanceType"
+          "Ref": "InstanceType"
         },
         "KeyName": {
           "Ref": "KeyPairName"
@@ -477,7 +422,7 @@
                 "cd /tmp \n",
                 "curl -O https://bootstrap.pypa.io/get-pip.py\n",
                 "python get-pip.py\n",
-                "echo DEBUGPipInstalled &> /tmp/bootstrap.log\n",
+                "echo DEBUGPipInstalled &> /tmp/bootstrapmidserver.log\n",
                 "pip install awscli\n",
                 "curl -O https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
                 "gunzip aws-cfn-bootstrap-latest.tar.gz\n",
@@ -492,19 +437,19 @@
                 {
                   "Ref": "AWS::StackName"
                 },
-                "         --resource ZabbixInstance ",
+                "         --resource TestInstance ",
                 "         --region ",
                 {
                   "Ref": "AWS::Region"
                 },
                 "\n",
-                "/tmp/bootstrapZabbix.sh -v --params_file /tmp/zabbix-setup.txt &>> /tmp/bootstrap.log\n",
+                "/tmp/bootstrapZabbixMidServer.sh -v --params_file /tmp/zabbix-mid-server-setup.txt &>> /tmp/bootstrapmidserver.log\n",
                 "/usr/bin/cfn-signal -e $? ",
                 "         --stack ",
                 {
                   "Ref": "AWS::StackName"
                 },
-                "         --resource ZabbixInstance ",
+                "         --resource TestInstance ",
                 "         --region ",
                 {
                   "Ref": "AWS::Region"
@@ -518,28 +463,8 @@
           {
             "Key": "Name",
             "Value": {
-              "Fn::Sub": "${EnvironmentName}-ZabbixServer"
+              "Ref": "ServerName"
             }
-          },
-          {
-            "Key": "Environment Name",
-            "Value": {
-              "Ref": "EnvironmentName"
-            }
-          },
-          {
-            "Key": "DNS Name",
-            "Value": {
-              "Ref": "ZabbixServerName"
-            }
-          },
-          {
-            "Key": "StackID",
-            "Value": "AWS-QS-ZABBIX"
-          },
-          {
-            "Key": "Purpose",
-            "Value": "AWS-QS-Zabbix-Server"
           }
         ]
       },
@@ -553,24 +478,24 @@
   "Outputs": {
     "ZabbixServerName": {
       "Value": {
-        "Ref": "ZabbixServerName"
+        "Ref": "ServerName"
       },
-      "Description": "Zabbix Server Name"
+      "Description": "Mid Server Name"
     },
     "InstanceID": {
       "Value": {
-        "Ref": "ZabbixInstance"
+        "Ref": "TestInstance"
       },
-      "Description": "Zabbix Instance ID"
+      "Description": "Test Instance ID"
     },
-    "ZabbixPrivateIPAddress": {
+    "TestInstancePrivateIPAddress": {
       "Value": {
         "Fn::GetAtt": [
-          "ZabbixInstance",
+          "TestInstance",
           "PrivateIp"
         ]
       },
-      "Description": "Zabbix Instance private IP"
+      "Description": "Mid Server Instance private IP"
     }
   }
 }

@@ -91,7 +91,6 @@ QS_S3_URL='NONE'
 QS_S3_BUCKET='NONE'
 QS_S3_KEY_PREFIX='NONE'
 QS_S3_SCRIPTS_PATH='NONE'
-QS_S3_SERVERSPEC_BUCKET='NONE'
 ZABBIX_SERVER='NONE'
 
 
@@ -101,7 +100,7 @@ if [ -f ${PARAMS_FILE} ]; then
     QS_S3_BUCKET=`grep 'QSS3Bucket' ${PARAMS_FILE} | awk -F'|' '{print $2}' | sed -e 's/^ *//g;s/ *$//g'`
     QS_S3_KEY_PREFIX=`grep 'QSS3KeyPrefix' ${PARAMS_FILE} | awk -F'|' '{print $2}' | sed -e 's/^ *//g;s/ *$//g'`
     ZABBIX_SERVER=`grep 'ZabbixServer' ${PARAMS_FILE} | awk -F'|' '{print $2}' | sed -e 's/^ *//g;s/ *$//g'`
-    QS_S3_SERVERSPEC_BUCKET=`grep 'QSServerSpecBucketName' ${PARAMS_FILE} | awk -F'|' '{print $2}' | sed -e 's/^ *//g;s/ *$//g'`
+
 
     # Strip leading slash
     if [[ ${QS_S3_KEY_PREFIX} == /* ]];then
@@ -163,11 +162,25 @@ YUM_PACKAGES=(
     ruby-devel
     rubygems
     rake
+    java-1.8.0
+    telnet
+    time
 )
 
 echo QS_BEGIN_Install_YUM_Packages
 install_packages ${YUM_PACKAGES[@]}
 echo QS_COMPLETE_Install_YUM_Packages
+
+
+sudo unlink /etc/alternatives/java
+sudo ln -s /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java /etc/alternatives/java
+
+
+sudo service httpd start 
+echo ""
+echo ""
+echo "###############################"
+
 
 
 #Go get the RPM for Zabbix
@@ -180,6 +193,8 @@ ZABBIX_PACKAGES=(
   zabbix-agent
   zabbix-sender
   zabbix-get
+
+
 )
 echo QS_BEGIN_Install_Zabbix_Packages
 install_packages ${ZABBIX_PACKAGES[@]}
@@ -189,7 +204,16 @@ sudo wget -O jq https://github.com/stedolan/jq/releases/download/jq-1.5/jq-linux
 sudo chmod +x ./jq
 sudo cp jq /usr/bin
 
-echo QS_END_Install_Zabbix_Packages
+sudo rpm -Uvh http://repo.rundeck.org/latest.rpm
+
+#Install Packages from RunDeck RPM for Mid Server Setup
+RUNDECK_PACKAGES=(
+  rundeck
+)
+echo QS_BEGIN_Install_RunDeck_Packages
+install_packages ${RUNDECK_PACKAGES[@]}
+
+echo QS_END_Install_RunDeck_Packages
 
 
 
@@ -197,7 +221,7 @@ cd /etc/zabbix/
 
 sudo grep -A20 "### Option: ServerActive" zabbix_agentd.conf | sed -i  "s/ServerActive=127.0.0.1/ServerActive=${ZABBIX_SERVER}/" zabbix_agentd.conf
 sudo grep -A20 "### Option: Server" zabbix_agentd.conf | sed -i  "s/Server=127.0.0.1/Server=${ZABBIX_SERVER}/" zabbix_agentd.conf
-sudo grep -A20 "### Option: Hostname" zabbix_agentd.conf | sed -i  "s/Hostname=Zabbix server/Hostname=ZabbixTestSubject/" zabbix_agentd.conf
+sudo grep -A20 "### Option: Hostname" zabbix_agentd.conf | sed -i  "s/Hostname=Zabbix server/Hostname=MidServer/" zabbix_agentd.conf
 sudo grep -A20 "### Option: HostMetadata" zabbix_agentd.conf | sed -i  "s/# HostMetadata=/HostMetadata=$(uname)   AWS-QuickStart/" zabbix_agentd.conf
 sudo grep -A20 "### Option: DebugLevel" zabbix_agentd.conf | sed -i  's/# DebugLevel=3/DebugLevel=5/' zabbix_agentd.conf
 sudo grep -A20 "### Option: EnableRemoteCommands" zabbix_agentd.conf | sed -i  's/# EnableRemoteCommands=0/EnableRemoteCommands=1/' zabbix_agentd.conf
@@ -206,9 +230,6 @@ sudo grep -A20 "### Option: UnsafeUserParameters" zabbix_agentd.conf | sed -i  '
 sudo grep -A20 "### Option: UserParameter" zabbix_agentd.conf | sed -i  's/# UserParameter=/UserParameter=AWS-QS-TEST,\/home\/ec2-user\/AWS-QS-TESTING\/serverspec.sh/' zabbix_agentd.conf
 sudo grep -A20 "### Option: AllowRoot" zabbix_agentd.conf | sed -i  's/# AllowRoot=0/AllowRoot=1/' zabbix_agentd.conf
 
-sudo hostnamectl set-hostname --static ZabbixTestSubject
-
-sudo echo preserve_hostname: true >> /etc/cloud/cloud.cfg
 
 cd /home/ec2-user
 
@@ -218,7 +239,7 @@ mkdir AWS-QS-TESTING
 
 cd AWS-QS-TESTING
 
-aws s3 cp s3://${QS_S3_SERVERSPEC_BUCKET} . --recursive
+aws s3 cp s3://serverspec-test . --recursive
 
 aws s3 cp s3://${QS_S3_BUCKET}/${QS_S3_KEY_PREFIX}/Scripts/serverspec.sh .
 
@@ -226,10 +247,10 @@ chmod +x serverspec.sh
 
 echo "QS_Restart_All_Services"
 sudo service zabbix-agent restart
-
-
-
+sudo service rundeckd restart
 echo "QS_END_OF_SETUP_ZABBIX"
+
+
 
 
 # END SETUP script
@@ -239,5 +260,6 @@ rm ${PARAMS_FILE}
 
 #Ensure all services survive reboot
 sudo systemctl enable zabbix-agent.service
+sudo systemctl enable rundeckd.service
 
-echo "Finished AWS Zabbix Quick Start Bootstrapping"
+echo "Finished AWS Zabbix Mid Server Quick Start Bootstrapping"

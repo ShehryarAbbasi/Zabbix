@@ -89,6 +89,7 @@ done
 ## Set an initial value
 QS_S3_URL='NONE'
 QS_S3_BUCKET='NONE'
+QS_S3_SERVERSPEC_BUCKET='NONE'
 QS_S3_KEY_PREFIX='NONE'
 QS_S3_SCRIPTS_PATH='NONE'
 DATABASE_PASS='NONE'
@@ -103,7 +104,7 @@ if [ -f ${PARAMS_FILE} ]; then
     DATABASE_PASS=`grep 'DatabasePass' ${PARAMS_FILE} | awk -F'|' '{print $2}' | sed -e 's/^ *//g;s/ *$//g'`
     DATABASE_USER=`grep 'DatabaseUser' ${PARAMS_FILE} | awk -F'|' '{print $2}' | sed -e 's/^ *//g;s/ *$//g'`
     DATABASE_CONN_STRING=`grep 'DBConnString' ${PARAMS_FILE} | awk -F'|' '{print $2}' | sed -e 's/^ *//g;s/ *$//g'`
-
+    QS_S3_SERVERSPEC_BUCKET=`grep 'QSServerSpecBucketName' ${PARAMS_FILE} | awk -F'|' '{print $2}' | sed -e 's/^ *//g;s/ *$//g'`
 
     # Strip leading slash
     if [[ ${QS_S3_KEY_PREFIX} == /* ]];then
@@ -135,7 +136,8 @@ fi
 # Start Zabbix Install and Database Setup
 #############################################################
 
-
+# Increase Ulimits
+ulimit -n 300000
 
 
 groupadd -g 54321 zinstall
@@ -175,12 +177,16 @@ YUM_PACKAGES=(
     php-bcmath
     php-mysql
     php-xml
+    MySQL-python
+
 )
 
 echo QS_BEGIN_Install_YUM_Packages
 install_packages ${YUM_PACKAGES[@]}
 echo QS_COMPLETE_Install_YUM_Packages
 
+pip install boto3
+pip install pyzabbix
 
 sudo wget http://dev.mysql.com/get/mysql57-community-release-el7-7.noarch.rpm
 
@@ -244,13 +250,16 @@ ZABBIX_PACKAGES=(
   zabbix-agent
   zabbix-java-gateway
   zabbix-sender
+  zabbix-get
 
 )
 echo QS_BEGIN_Install_Zabbix_Packages
 install_packages ${ZABBIX_PACKAGES[@]}
 echo QS_END_Install_Zabbix_Packages
 
-
+sudo wget -O jq https://github.com/stedolan/jq/releases/download/jq-1.5/jq-linux64
+sudo chmod +x ./jq
+sudo cp jq /usr/bin
 
 #Need to set timezone as Zabbix install depends on it.
 
@@ -305,7 +314,7 @@ mysql -u root --password="${DATABASE_PASS}" -e "FLUSH PRIVILEGES;"
 echo QS_END_Create_Zabbix_MySql_Database
 
 #Move to Director where Zabbix Mysql Server is
-cd /usr/share/doc/zabbix-server-mysql-3.2.6/
+cd /usr/share/doc/zabbix-server-mysql-3.*/
 
 #Unzip Create.sql.gz file
 #Run create.sql file against zabbixdb we created above to create schema and data.
@@ -357,7 +366,7 @@ echo QS_END_Create_Zabbix_Aurora_Database
 
 
 #Move to Director where Zabbix Mysql Server is
-cd /usr/share/doc/zabbix-server-mysql-3.2.6/
+cd /usr/share/doc/zabbix-server-mysql-3.*/
 
 #Unzip Create.sql.gz file
 #Run create.sql file against zabbixdb we created above to create schema and data.
@@ -411,11 +420,12 @@ sudo echo "update zabbix.ids set nextid='10106' where table_name='hosts';"  >> c
 
 sudo echo "INSERT INTO \`hosts_groups\`  (\`hostgroupid\`,\`hostid\`,\`groupid\`) values ('113', '10106', '1');"  >> create_aws_quickstart.sql
 
+#sudo echo "INSERT INTO \`hosts_groups\`  (\`hostgroupid\`,\`hostid\`,\`groupid\`) values ('114', '10107', '5');"  >> create_aws_quickstart.sql
+
 sudo echo "update zabbix.ids set nextid='113' where table_name='hosts_groups';"  >> create_aws_quickstart.sql
 
 
 sudo echo "INSERT INTO \`operations\`  (\`operationid\`,\`actionid\`,\`operationtype\`,\`esc_period\`,\`esc_step_from\`,\`esc_step_to\`,\`evaltype\`,\`recovery\`) values ('12', '7', '6', '0', '1', '1', '0', '0');"  >> create_aws_quickstart.sql
-
 
 sudo echo "INSERT INTO \`operations\`  (\`operationid\`,\`actionid\`,\`operationtype\`,\`esc_period\`,\`esc_step_from\`,\`esc_step_to\`,\`evaltype\`,\`recovery\`) values ('13', '8', '6', '0', '1', '1', '0', '0');"  >> create_aws_quickstart.sql
 
@@ -425,7 +435,24 @@ sudo echo "INSERT INTO \`operations\`  (\`operationid\`,\`actionid\`,\`operation
 
 sudo echo "INSERT INTO \`operations\`  (\`operationid\`,\`actionid\`,\`operationtype\`,\`esc_period\`,\`esc_step_from\`,\`esc_step_to\`,\`evaltype\`,\`recovery\`) values ('16', '7', '6', '0', '1', '1', '0', '0');"  >> create_aws_quickstart.sql
 
-sudo echo "update zabbix.ids set nextid='16' where table_name='operations';"  >> create_aws_quickstart.sql
+sudo echo "INSERT INTO \`operations\`  (\`operationid\`,\`actionid\`,\`operationtype\`,\`esc_period\`,\`esc_step_from\`,\`esc_step_to\`,\`evaltype\`,\`recovery\`) values ('17', '7', '1', '0', '1', '1', '0', '0');"  >> create_aws_quickstart.sql
+
+sudo echo "INSERT INTO \`operations\`  (\`operationid\`,\`actionid\`,\`operationtype\`,\`esc_period\`,\`esc_step_from\`,\`esc_step_to\`,\`evaltype\`,\`recovery\`) values ('18', '8', '1', '0', '1', '1', '0', '0');"  >> create_aws_quickstart.sql
+
+sudo echo "update zabbix.ids set nextid='18' where table_name='operations';"  >> create_aws_quickstart.sql
+
+
+sudo echo "INSERT INTO \`opcommand\`  (\`operationid\`,\`type\`,\`scriptid\`,\`execute_on\`,\`port\`,\`authtype\`,\`username\`,\`password\`,\`publickey\`,\`privatekey\`,\`command\`) values ('17', '0', NULL, '1', '', '0', '', '', '', '', 'sudo /usr/lib/zabbix/externalscripts/get_account_and_stack.sh {HOST.HOST}  {HOST.IP}');"  >> create_aws_quickstart.sql
+
+sudo echo "INSERT INTO \`opcommand\`  (\`operationid\`,\`type\`,\`scriptid\`,\`execute_on\`,\`port\`,\`authtype\`,\`username\`,\`password\`,\`publickey\`,\`privatekey\`,\`command\`) values ('18', '0', NULL, '1', '', '0', '', '', '', '', 'sudo /usr/lib/zabbix/externalscripts/get_account_and_stack.sh {HOST.HOST}  {HOST.IP}');"  >> create_aws_quickstart.sql
+
+
+sudo echo "INSERT INTO \`opcommand_hst\`  (\`opcommand_hstid\`,\`operationid\`,\`hostid\`) values ('1', '17', NULL);"  >> create_aws_quickstart.sql
+
+sudo echo "INSERT INTO \`opcommand_hst\`  (\`opcommand_hstid\`,\`operationid\`,\`hostid\`) values ('2', '18', NULL);"  >> create_aws_quickstart.sql
+
+sudo echo "update zabbix.ids set nextid='2' where table_name='opcommand_hst';"  >> create_aws_quickstart.sql
+
 
 
 sudo echo "INSERT INTO \`opgroup\`  (\`opgroupid\`,\`operationid\`,\`groupid\`) values ('3', '14', '8');"  >> create_aws_quickstart.sql
@@ -468,9 +495,7 @@ sudo echo "update zabbix.ids set nextid='469' where table_name='applications';" 
 sudo echo "INSERT INTO \`items\`  (\`itemid\`,\`type\`,\`snmp_community\`,\`snmp_oid\`,\`hostid\`,\`name\`,\`key_\`,\`delay\`,\`history\`,\`trends\`,\`status\`,\`value_type\`,\`trapper_hosts\`,\`units\`,\`multiplier\`,\`delta\`,\`snmpv3_securityname\`,\`snmpv3_securitylevel\`,\`snmpv3_authpassphrase\`,\`snmpv3_privpassphrase\`,\`formula\`,\`error\`,\`lastlogsize\`,\`logtimefmt\`,\`templateid\`,\`valuemapid\`,\`delay_flex\`,\`params\`,\`ipmi_sensor\`,\`data_type\`,\`authtype\`,\`username\`,\`password\`,\`publickey\`,\`privatekey\`,\`mtime\`,\`flags\`,\`interfaceid\`,\`port\`,\`description\`,\`inventory_link\`,\`lifetime\`,\`snmpv3_authprotocol\`,\`snmpv3_privprotocol\`,\`state\`,\`snmpv3_contextname\`,\`evaltype\`) values ('25531', '0', '', '', '10106', 'AWS-QS-TEST', 'AWS-QS-TEST', '30', '90', '0', '0', '4', '', '', '0', '0', '', '0', '', '', '', '', '0', '', NULL, NULL, '', '', '', '0', '0', '', '', '', '', '0', '1', NULL, '', '', '0', '30', '0', '0', '0', '', '0');"  >> create_aws_quickstart.sql
 
 
-sudo echo "INSERT INTO \`items\`  (\`itemid\`,\`type\`,\`snmp_community\`,\`snmp_oid\`,\`hostid\`,\`name\`,\`key_\`,\`delay\`,\`history\`,\`trends\`,\`status\`,\`value_type\`,\`trapper_hosts\`,\`units\`,\`multiplier\`,\`delta\`,\`snmpv3_securityname\`,\`snmpv3_securitylevel\`,\`snmpv3_authpassphrase\`,\`snmpv3_privpassphrase\`,\`formula\`,\`error\`,\`lastlogsize\`,\`logtimefmt\`,\`templateid\`,\`valuemapid\`,\`delay_flex\`,\`params\`,\`ipmi_sensor\`,\`data_type\`,\`authtype\`,\`username\`,\`password\`,\`publickey\`,\`privatekey\`,\`mtime\`,\`flags\`,\`interfaceid\`,\`port\`,\`description\`,\`inventory_link\`,\`lifetime\`,\`snmpv3_authprotocol\`,\`snmpv3_privprotocol\`,\`state\`,\`snmpv3_contextname\`,\`evaltype\`) values ('25552', '2', '', '', '10106', 'Test - {#TEST}', 'test[{#TEST}]', '0', '90', '0', '0', '4', '', '', '0', '0', '', '0', '', '', '1', '', '0', '', NULL, NULL, '', '', '', '0', '0', '', '', '', '', '0', '2', NULL, '', '', '0', '30', '0', '0', '0', '', '0');"  >> create_aws_quickstart.sql
-
-
+sudo echo "INSERT INTO \`items\`  (\`itemid\`,\`type\`,\`snmp_community\`,\`snmp_oid\`,\`hostid\`,\`name\`,\`key_\`,\`delay\`,\`history\`,\`trends\`,\`status\`,\`value_type\`,\`trapper_hosts\`,\`units\`,\`multiplier\`,\`delta\`,\`snmpv3_securityname\`,\`snmpv3_securitylevel\`,\`snmpv3_authpassphrase\`,\`snmpv3_privpassphrase\`,\`formula\`,\`error\`,\`lastlogsize\`,\`logtimefmt\`,\`templateid\`,\`valuemapid\`,\`delay_flex\`,\`params\`,\`ipmi_sensor\`,\`data_type\`,\`authtype\`,\`username\`,\`password\`,\`publickey\`,\`privatekey\`,\`mtime\`,\`flags\`,\`interfaceid\`,\`port\`,\`description\`,\`inventory_link\`,\`lifetime\`,\`snmpv3_authprotocol\`,\`snmpv3_privprotocol\`,\`state\`,\`snmpv3_contextname\`,\`evaltype\`) values ('25552', '2', '', '', '10106', 'Test - {#TEST}', 'test[{#TEST}]', '0', '90', '0', '0', '3', '', '', '0', '0', '', '0', '', '', '1', '', '0', '', NULL, NULL, '', '', '', '0', '0', '', '', '', '', '0', '2', NULL, '', '', '0', '30', '0', '0', '0', '', '0');"  >> create_aws_quickstart.sql
 
 
 sudo echo "update zabbix.ids set nextid='25552' where table_name='items';"  >> create_aws_quickstart.sql
@@ -481,15 +506,12 @@ sudo echo "INSERT INTO \`items_applications\`  (\`itemappid\`,\`applicationid\`,
 sudo echo "update zabbix.ids set nextid='5965' where table_name='items_applications';"  >> create_aws_quickstart.sql
 
 
-
-
 sudo echo "INSERT INTO \`item_discovery\`  (\`itemdiscoveryid\`,\`itemid\`,\`parent_itemid\`,\`key_\`,\`lastcheck\`,\`ts_delete\`) values ('312', '25552', '25531', '', '0', '0');"  >> create_aws_quickstart.sql
 
 sudo echo "update zabbix.ids set nextid='312' where table_name='item_discovery';"  >> create_aws_quickstart.sql
 
 
-
-
+sudo echo "INSERT INTO \`scripts\`  (\`scriptid\`,\`name\`,\`command\`,\`host_access\`,\`usrgrpid\`,\`groupid\`,\`description\`,\`confirmation\`,\`type\`,\`execute_on\`) values ('4', 'Update ServerSpec Test', 'cd /home/ec2-user/AWS-QS-TESTING && sudo aws s3 cp s3://${QS_S3_SERVERSPEC_BUCKET} . --recursive', '3', NULL, '8', '', 'Are you sure?', '0', '0');"  >> create_aws_quickstart.sql
 
 
 mysql --user=${DATABASE_USER} --host=${DATABASE_CONN_STRING} --port=3306 --password="${DATABASE_PASS}" zabbix < create_aws_quickstart.sql
@@ -499,10 +521,65 @@ fi
 echo QS_END_Create_Zabbix_Web_Conf_File
 
 
+
+cd /etc/zabbix/
+
+sudo grep -A20 "### Option: DebugLevel" zabbix_agentd.conf | sed -i  's/# DebugLevel=3/DebugLevel=5/' zabbix_agentd.conf
+sudo grep -A20 "### Option: EnableRemoteCommands" zabbix_agentd.conf | sed -i  's/# EnableRemoteCommands=0/EnableRemoteCommands=1/' zabbix_agentd.conf
+sudo grep -A20 "### Option: StartAgents" zabbix_agentd.conf | sed -i  's/# StartAgents=3/StartAgents=3/' zabbix_agentd.conf
+sudo grep -A20 "### Option: UnsafeUserParameters" zabbix_agentd.conf | sed -i  's/# UnsafeUserParameters=0/UnsafeUserParameters=1/' zabbix_agentd.conf
+sudo grep -A20 "### Option: AllowRoot" zabbix_agentd.conf | sed -i  's/# AllowRoot=0/AllowRoot=1/' zabbix_agentd.conf
+
+
 echo "QS_Restart_All_Services"
 sudo service httpd restart
 sudo service zabbix-server restart
 sudo service zabbix-agent restart
+
+
+
+mkdir -p /etc/zabbix/midscripts/zabbix-gnomes
+
+cd /etc/zabbix/midscripts/zabbix-gnomes
+
+aws s3 cp s3://${QS_S3_BUCKET}/${QS_S3_KEY_PREFIX}/Scripts/zhostupdater.py .
+
+aws s3 cp s3://${QS_S3_BUCKET}/${QS_S3_KEY_PREFIX}/Scripts/zhtmplfinder.py .
+
+cd /usr/lib/zabbix/externalscripts
+
+aws s3 cp s3://${QS_S3_BUCKET}/${QS_S3_KEY_PREFIX}/Scripts/get_account_and_stack.sh .
+
+chmod +x get_account_and_stack.sh
+
+mkdir -p /usr/lib/zabbix/scripts
+
+cd /usr/lib/zabbix/scripts
+
+aws s3 cp s3://${QS_S3_BUCKET}/${QS_S3_KEY_PREFIX}/Scripts/get_account_alias.sh  .
+
+chmod +x get_account_alias.sh
+
+aws s3 cp s3://${QS_S3_BUCKET}/${QS_S3_KEY_PREFIX}/Scripts/get_instance_stack.sh .
+
+chmod +x get_instance_stack.sh
+
+
+#create zabbix conf dir
+sudo mkdir -p /root
+cd /root
+
+cat <<EOF > .zbx.conf
+[Zabbix API]
+username=${DATABASE_USER}
+password=${DATABASE_PASS}
+api=http://localhost/zabbix
+no_verify=true
+EOF
+
+#midscript api config
+ln -s /root/.zbx.conf /etc/zabbix/midscripts/zabbix-gnomes/zbx.conf
+
 
 # Remove passwords from files
 sed -i s/${DATABASE_PASS}/xxxxx/g  /var/log/cloud-init.log
